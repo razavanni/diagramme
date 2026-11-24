@@ -1,28 +1,40 @@
 @import "tailwindcss";
 
-/* Farben als Tailwind-Theme: bg-bg, text-fg, border-line, text-muted, bg-panel, stroke-grid, fill-we, fill-bar, fill-crit */
+/* Farben als Tailwind-Theme (bg-bg, text-fg, border-line, fill-bar, ...); Dark Mode folgt dem System */
 @theme {
-  --color-bg: #fff;
-  --color-fg: #111;
-  --color-line: #111;
-  --color-muted: #666;
-  --color-panel: #f4f4f4;
-  --color-grid: #e2e2e2;
-  --color-we: #f2f2f2;
-  --color-bar: #2f6fde;
-  --color-crit: #d93025;
+  --color-bg: #ffffff; /* Karten, Kästen, Eingabefelder */
+  --color-canvas: #f4f5f8; /* Hintergrund der Zeichenfläche */
+  --color-panel: #ffffff; /* Seitenleiste */
+  --color-fg: #1f2328;
+  --color-muted: #6b7280;
+  --color-border: #dfe2e8; /* Rahmen von Karten/Feldern */
+  --color-line: #8a93a3; /* Verbindungslinien im PSP */
+  --color-box: #c9ced8; /* Rahmen der PSP-Kästen */
+  --color-accent: #4f46e5;
+  --color-on-accent: #ffffff; /* Text auf Akzentflächen */
+  --color-grid: #eceef2;
+  --color-zebra: #f8f9fb;
+  --color-we: #f0f1f5;
+  --color-bar: #5b6cf0;
+  --color-crit: #e5484d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #222120;
-    --color-fg: #eee;
-    --color-line: #eee;
-    --color-muted: #aaa;
-    --color-panel: #2c2b2a;
-    --color-grid: #3a3937;
-    --color-we: #2a2928;
-    --color-bar: #5b9bff;
-    --color-crit: #ff6b5b;
+    --color-bg: #212226;
+    --color-canvas: #16171a;
+    --color-panel: #1c1d20;
+    --color-fg: #ececef;
+    --color-muted: #9aa0aa;
+    --color-border: #33353b;
+    --color-line: #6b7280;
+    --color-box: #43464e;
+    --color-accent: #8b93ff;
+    --color-on-accent: #121318;
+    --color-grid: #2c2e33;
+    --color-zebra: #25262a;
+    --color-we: #1b1c1f;
+    --color-bar: #7b86ff;
+    --color-crit: #ff6b6f;
   }
 }

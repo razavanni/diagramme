@@ -1,4 +1,17 @@
-import { flatten, parse, SAMPLE, schedule, toData, toText } from './plan';
+import { calendar, flatten, parse, SAMPLE, schedule, toData, toText } from './plan';
+
+const days = (start: string, n: number, workdays: boolean) =>
+  calendar(new Date(start + 'T00:00'), n, workdays).map((d) => d.getDate());
+
+describe('calendar', () => {
+  it('zählt Kalendertage durch', () => {
+    expect(days('2026-11-27', 4, false)).toEqual([27, 28, 29, 30]); // Fr, Sa, So, Mo
+  });
+  it('überspringt im Werktage-Modus das Wochenende', () => {
+    expect(days('2026-11-27', 3, true)).toEqual([27, 30, 1]); // Fr, Mo, Di
+    expect(days('2026-11-28', 1, true)).toEqual([30]); // Start Samstag -> Montag
+  });
+});
 
 const plan = (text: string) => {
   const rows = flatten(parse(text));

@@ -1,107 +1,168 @@
-<div class="flex h-screen bg-bg font-sans text-fg">
+<div class="flex h-screen bg-canvas font-sans text-fg">
   <!-- Eingabe -->
-  <div class="flex min-w-[200px] max-w-[85vw] shrink-0 flex-col gap-2 overflow-auto bg-panel p-3" [style.width.px]="width()">
-    <strong>PSP-Generator</strong>
-    <div class="flex gap-1">
-      @for (v of [['psp', 'Projektstrukturplan'], ['gantt', 'Gantt-Diagramm']]; track v[0]) {
-        <button class="flex-1 cursor-pointer rounded border px-2.5 py-1.5"
-          [class]="view() === v[0] ? 'border-line bg-bg font-semibold' : 'border-muted'"
+  <aside class="flex min-w-[240px] max-w-[85vw] shrink-0 flex-col gap-4 overflow-auto border-r border-border bg-panel p-4" [style.width.px]="width()">
+    <header class="flex items-center gap-2.5">
+      <div class="grid size-9 shrink-0 place-items-center rounded-lg bg-accent text-xs font-bold tracking-wide text-on-accent">PSP</div>
+      <div>
+        <h1 class="text-base leading-tight font-semibold">PSP-Generator</h1>
+        <p class="text-xs text-muted">Projektstrukturplan &amp; Gantt aus Text</p>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-2 gap-1 rounded-lg bg-canvas p-1 text-sm">
+      @for (v of [['psp', 'Strukturplan'], ['gantt', 'Gantt-Diagramm']]; track v[0]) {
+        <button class="cursor-pointer rounded-md px-3 py-1.5 font-medium transition"
+          [class]="view() === v[0] ? 'bg-bg text-fg shadow-sm' : 'text-muted hover:text-fg'"
           [attr.aria-pressed]="view() === v[0]" (click)="view.set($any(v[0]))">{{ v[1] }}</button>
       }
     </div>
+
     @if (view() === 'gantt') {
-      <div class="flex flex-col gap-1.5">
-        <label>Projektstart:
-          <input type="date" class="rounded border border-muted bg-bg px-1" [value]="start()" (input)="start.set($any($event.target).value)">
+      <section class="flex flex-col gap-3 rounded-lg border border-border p-3 text-sm">
+        <label class="flex items-center justify-between gap-2">
+          <span class="font-medium">Projektstart</span>
+          <input type="date" class="rounded-md border border-border bg-bg px-2 py-1 text-sm outline-none focus:border-accent"
+            [value]="start()" (input)="start.set($any($event.target).value)">
         </label>
-        <div class="flex flex-wrap gap-x-3 gap-y-1 text-sm">
-          Anzeigen:
-          @for (o of showOpts; track o[0]) {
-            <label><input type="checkbox" [checked]="show()[o[0]]" (change)="toggle(o[0], $any($event.target).checked)"> {{ o[1] }}</label>
-          }
+        <label class="flex cursor-pointer items-center justify-between gap-3">
+          <span>
+            <span class="font-medium">Nur Werktage</span><br>
+            <span class="text-xs text-muted">Wochenende ausblenden, Dauern zählen Mo–Fr</span>
+          </span>
+          <input type="checkbox" role="switch" class="peer sr-only" [checked]="workdays()" (change)="workdays.set($any($event.target).checked)">
+          <span class="relative h-5 w-9 shrink-0 rounded-full bg-box transition peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/40
+            after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-4"></span>
+        </label>
+        <div>
+          <div class="mb-1.5 text-xs font-medium tracking-wide text-muted uppercase">Anzeigen</div>
+          <div class="flex flex-wrap gap-1.5">
+            @for (o of showOpts; track o[0]) {
+              <label class="flex cursor-pointer items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs select-none has-checked:border-accent has-checked:bg-accent/10 has-checked:text-accent">
+                <input type="checkbox" class="size-3.5 accent-accent" [checked]="show()[o[0]]" (change)="toggle(o[0], $any($event.target).checked)"> {{ o[1] }}
+              </label>
+            }
+          </div>
         </div>
-      </div>
+      </section>
     }
-    <textarea spellcheck="false" class="min-h-40 flex-1 resize-none whitespace-pre border border-muted bg-bg p-2 font-[Consolas,monospace] text-sm leading-normal text-fg [tab-size:4]"
-      [value]="text()" (input)="text.set($any($event.target).value)" (keydown)="onKey($event)"></textarea>
-    <small class="leading-snug text-muted">
-      Eine Zeile = ein Arbeitspaket.<br>
-      <b>Tab</b> = eine Ebene tiefer, <b>Shift+Tab</b> = höher (geht auch für markierte Zeilen).<br>
-      <b>&gt;</b> am Zeilenanfang = Arbeitspaket (wird untereinander gezeichnet, auf jeder Ebene): <code>&gt; Paket A</code><br>
-      Weitere Angaben optional mit <b>|</b> trennen, Reihenfolge egal:<br>
-      &nbsp;• Verantwortlicher: <code>| Karl Klammer</code><br>
-      &nbsp;• Dauer in Tagen: <code>| 5d</code> (<code>0d</code> = Meilenstein)<br>
-      &nbsp;• Vorgänger: <code>| nach 1.1, 1.2.3</code> (startet, wenn diese fertig sind)<br>
-      &nbsp;&nbsp;&nbsp;mit Kürzel dahinter: <code>EE</code> = gleich enden (A 3d, B 2d <code>| nach 1.1 EE</code> → B startet an Tag 2, beide fertig an Tag 3),
-      <code>AA</code> = gleich anfangen, <code>AE</code> = enden, wenn Vorgänger anfängt<br>
-      PSP-Codes werden automatisch vergeben. Oberpunkte im Gantt ergeben sich aus ihren Unterpunkten.
-      Rot = kritischer Pfad (jede Verzögerung dort verschiebt das Projektende).
-    </small>
-    <button class="cursor-pointer rounded border border-muted px-2.5 py-1.5" (click)="saveImage()">Als Bild speichern (PNG)</button>
-    <div class="flex gap-1">
-      <button class="flex-1 cursor-pointer rounded border border-muted px-2.5 py-1.5" (click)="exportJson()">JSON exportieren</button>
-      <button class="flex-1 cursor-pointer rounded border border-muted px-2.5 py-1.5" (click)="jsonFile.click()">JSON importieren</button>
+
+    <div class="flex min-h-48 flex-1 flex-col gap-1.5">
+      <label for="input" class="text-xs font-medium tracking-wide text-muted uppercase">Eingabe</label>
+      <textarea id="input" spellcheck="false"
+        class="flex-1 resize-none rounded-lg border border-border bg-bg p-3 font-[Consolas,monospace] text-[13px] leading-relaxed whitespace-pre text-fg outline-none [tab-size:4] focus:border-accent focus:ring-2 focus:ring-accent/20"
+        [value]="text()" (input)="text.set($any($event.target).value)" (keydown)="onKey($event)"></textarea>
+    </div>
+
+    <details class="rounded-lg border border-border text-xs leading-relaxed text-muted [&_code]:rounded [&_code]:bg-canvas [&_code]:px-1 [&_code]:text-fg">
+      <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-fg select-none">Hilfe zur Eingabe</summary>
+      <div class="space-y-1.5 px-3 pb-3">
+        <p>Eine Zeile = ein Punkt. <b>Tab</b> = eine Ebene tiefer, <b>Shift+Tab</b> = höher (auch für markierte Zeilen).</p>
+        <p><b>&gt;</b> am Zeilenanfang = Arbeitspaket (wird untereinander gezeichnet): <code>&gt; Paket A</code></p>
+        <p>Weitere Angaben optional mit <b>|</b> trennen, Reihenfolge egal:</p>
+        <ul class="list-disc space-y-1 pl-4">
+          <li>Verantwortlicher: <code>| Karl Klammer</code></li>
+          <li>Dauer: <code>| 5d</code> (<code>0d</code> = Meilenstein) – Kalendertage, mit „Nur Werktage“ Werktage</li>
+          <li>Vorgänger: <code>| nach 1.1, 1.2.3</code> (startet, wenn diese fertig sind)</li>
+          <li>Kürzel dahinter: <code>EE</code> = gleich enden (A 3d, B 2d <code>| nach 1.1 EE</code> → B startet an Tag 2, beide fertig an Tag 3),
+            <code>AA</code> = gleich anfangen, <code>AE</code> = enden, wenn Vorgänger anfängt</li>
+        </ul>
+        <p>PSP-Codes werden automatisch vergeben. Oberpunkte im Gantt ergeben sich aus ihren Unterpunkten.
+          Rot = kritischer Pfad: jede Verzögerung dort verschiebt das Projektende.</p>
+      </div>
+    </details>
+
+    <div class="flex flex-col gap-2 text-sm">
+      <button class="cursor-pointer rounded-lg bg-accent px-3 py-2 font-medium text-on-accent shadow-sm transition hover:opacity-90" (click)="saveImage()">Als Bild speichern (PNG)</button>
+      <div class="grid grid-cols-2 gap-2">
+        <button class="cursor-pointer rounded-lg border border-border bg-bg px-3 py-2 transition hover:bg-canvas" (click)="exportJson()">JSON exportieren</button>
+        <button class="cursor-pointer rounded-lg border border-border bg-bg px-3 py-2 transition hover:bg-canvas" (click)="jsonFile.click()">JSON importieren</button>
+      </div>
     </div>
     <input #jsonFile type="file" accept=".json,application/json" hidden (change)="importJson(jsonFile)">
-  </div>
+  </aside>
 
-  <div class="w-1.5 shrink-0 cursor-col-resize touch-none hover:bg-bar" [class]="dragging() ? 'bg-bar' : 'bg-grid'"
+  <div class="w-1.5 shrink-0 cursor-col-resize touch-none transition hover:bg-accent/40" [class]="dragging() ? 'bg-accent/60' : ''"
     title="Ziehen zum Verbreitern/Verschmälern, Doppelklick = Standardbreite" (mousedown)="startDrag($event)" (dblclick)="width.set(340)"></div>
 
   <!-- Ausgabe -->
-  <div #out class="flex-1 overflow-auto">
+  <main #out class="flex-1 overflow-auto bg-canvas">
     @if (view() === 'psp') {
-      <div class="mx-auto w-max p-6">
+      <div class="mx-auto w-max p-8">
         <ng-container *ngTemplateOutlet="hlist; context: { $implicit: tree(), nested: false }" />
       </div>
     } @else {
       @let g = gantt();
-      <div class="w-max p-6">
-        @if (g.msg) {
-          {{ g.msg }}
-        } @else {
-          <svg class="text-[13px]" [attr.width]="g.W" [attr.height]="g.H! + 1" [attr.viewBox]="'0 0 ' + g.W + ' ' + (g.H! + 1)">
-            @for (d of g.days; track $index) {
-              @if (d.we) { <rect class="fill-we" [attr.x]="d.x" [attr.y]="g.HH! - 18" [attr.width]="g.DW" [attr.height]="g.H! - g.HH! + 18" /> }
-              <line class="stroke-grid" [attr.x1]="d.x" [attr.y1]="g.HH! - 18" [attr.x2]="d.x" [attr.y2]="g.H" />
-              <text class="fill-muted" [attr.x]="d.x + g.DW! / 2" [attr.y]="g.HH! - 5" text-anchor="middle">{{ d.date }}</text>
-              @if (d.month) { <text class="fill-fg" [attr.x]="d.x + 2" y="14">{{ d.month }}</text> }
-            }
-            <line class="stroke-grid" [attr.x1]="g.xEnd" [attr.y1]="g.HH! - 18" [attr.x2]="g.xEnd" [attr.y2]="g.H" />
-            @for (row of g.rows; track row.r.code) {
-              <line class="stroke-grid" x1="0" [attr.y1]="row.y" [attr.x2]="g.W" [attr.y2]="row.y" />
-              <text class="fill-muted" x="4" [attr.y]="row.y + 17">{{ row.r.code }}</text>
-              <text class="fill-fg" [class.font-semibold]="row.r.children.length" [attr.x]="g.codeW! + row.r.depth! * g.IND!" [attr.y]="row.y + 17">{{ row.r.name }}</text>
-              @switch (row.kind) {
-                @case ('ms') {
-                  <polygon [class]="row.crit ? 'fill-crit' : 'fill-fg'" [attr.points]="row.msPoints"><title>{{ row.tip }}</title></polygon>
+      <div class="w-max p-8">
+        <div class="rounded-xl border border-border bg-bg p-5 shadow-sm">
+          @if (g.msg) {
+            <p class="text-sm text-muted">{{ g.msg }}</p>
+          } @else {
+            <div class="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted">
+              <span class="flex items-center gap-1.5"><span class="h-2.5 w-5 rounded-sm bg-bar"></span> Arbeitspaket</span>
+              @if (show().crit) { <span class="flex items-center gap-1.5"><span class="h-2.5 w-5 rounded-sm bg-crit"></span> Kritischer Pfad</span> }
+              <span class="flex items-center gap-1.5"><span class="h-1.5 w-5 bg-fg"></span> Sammelvorgang</span>
+              <span class="flex items-center gap-1.5"><span class="size-2.5 rotate-45 bg-fg"></span> Meilenstein</span>
+              <span class="ml-auto">Dauern in {{ workdays() ? 'Werktagen (Mo–Fr)' : 'Kalendertagen' }}</span>
+            </div>
+            <svg class="text-[13px]" [attr.width]="g.W" [attr.height]="g.H! + 1" [attr.viewBox]="'0 0 ' + g.W + ' ' + (g.H! + 1)">
+              <!-- Hintergründe -->
+              <rect class="fill-zebra" x="0" y="0" [attr.width]="g.W" [attr.height]="g.HH" rx="6" />
+              @for (row of g.rows; track row.r.code; let odd = $odd) {
+                @if (odd) { <rect class="fill-zebra" x="0" [attr.y]="row.y" [attr.width]="g.W" [attr.height]="g.RH" /> }
+              }
+              @for (d of g.days; track $index) {
+                @if (d.we) { <rect class="fill-we" [attr.x]="d.x" y="20" [attr.width]="g.DW" [attr.height]="g.H! - 20" /> }
+              }
+              <!-- Zeitachse -->
+              @for (d of g.days; track $index) {
+                <line [class]="d.month || d.week ? 'stroke-box' : 'stroke-grid'" [attr.x1]="d.x" [attr.y1]="d.month ? 0 : 20" [attr.x2]="d.x" [attr.y2]="g.H" />
+                @if (d.month) { <text class="fill-fg font-semibold" [attr.x]="d.x + 6" y="14">{{ d.month }}</text> }
+                <text class="fill-muted text-[10px]" [attr.x]="d.x + g.DW! / 2" y="33" text-anchor="middle">{{ d.wd }}</text>
+                <text class="fill-fg text-[12px]" [attr.x]="d.x + g.DW! / 2" y="47" text-anchor="middle">{{ d.date }}</text>
+              }
+              <line class="stroke-box" [attr.x1]="g.xEnd" y1="20" [attr.x2]="g.xEnd" [attr.y2]="g.H" />
+              <line class="stroke-box" [attr.x1]="g.X0" y1="0" [attr.x2]="g.X0" [attr.y2]="g.H" />
+              <line class="stroke-box" x1="0" [attr.y1]="g.HH" [attr.x2]="g.W" [attr.y2]="g.HH" />
+              <text class="fill-muted text-[11px] font-semibold" x="8" y="47">Code</text>
+              <text class="fill-muted text-[11px] font-semibold" [attr.x]="g.codeW" y="47">Vorgang</text>
+              <!-- Zeilen -->
+              @for (row of g.rows; track row.r.code) {
+                <text class="fill-muted text-[12px]" x="8" [attr.y]="row.m" dominant-baseline="central">{{ row.r.code }}</text>
+                <text class="fill-fg" [class.font-semibold]="row.r.children.length" [attr.x]="g.codeW! + row.r.depth! * g.IND!" [attr.y]="row.m" dominant-baseline="central">{{ row.r.name }}</text>
+                @switch (row.kind) {
+                  @case ('ms') {
+                    <polygon [class]="row.crit ? 'fill-crit' : 'fill-fg'" [attr.points]="row.msPoints"><title>{{ row.tip }}</title></polygon>
+                  }
+                  @case ('sum') {
+                    <path class="fill-fg" [attr.d]="row.sumPath"><title>{{ row.tip }}</title></path>
+                  }
+                  @case ('bar') {
+                    <rect [class]="row.crit ? 'fill-crit' : 'fill-bar'" [attr.x]="row.x1 + 2" [attr.y]="row.m - 8" [attr.width]="row.x2 - row.x1 - 4" height="16" rx="4"><title>{{ row.tip }}</title></rect>
+                  }
                 }
-                @case ('sum') {
-                  <path class="fill-fg" [attr.d]="row.sumPath"><title>{{ row.tip }}</title></path>
-                }
-                @case ('bar') {
-                  <rect [class]="row.crit ? 'fill-crit' : 'fill-bar'" [attr.x]="row.x1 + 1" [attr.y]="row.y + 6" [attr.width]="row.x2 - row.x1 - 2" [attr.height]="g.RH! - 12" rx="3"><title>{{ row.tip }}</title></rect>
+                @if (row.kind && row.r.person && g.person) {
+                  <text class="fill-muted text-[12px]" [attr.x]="row.x2 + 10" [attr.y]="row.m" dominant-baseline="central">{{ row.r.person }}</text>
                 }
               }
-              @if (row.kind && row.r.person && g.person) {
-                <text class="fill-muted" [attr.x]="row.x2 + 10" [attr.y]="row.y + 17">{{ row.r.person }}</text>
-              }
-            }
-            <line class="stroke-grid" x1="0" [attr.y1]="g.H" [attr.x2]="g.W" [attr.y2]="g.H" />
-          </svg>
-        }
+              <line class="stroke-box" x1="0" [attr.y1]="g.H" [attr.x2]="g.W" [attr.y2]="g.H" />
+            </svg>
+          }
+        </div>
       </div>
     }
-  </div>
+  </main>
 </div>
 
-<!-- Kasten -->
+<!-- Kasten: oberste Ebene gefüllt, zweite Ebene mit Akzentkante -->
 <ng-template #box let-it let-vert="vert" let-wide="wide">
-  <div class="max-w-[200px] min-w-[120px] border-[1.5px] border-line bg-bg wrap-break-word"
-    [class]="(vert ? 'px-2.5 py-1 text-left' : 'px-3 py-1.5 text-center') + (wide ? ' min-w-[max(120px,60%)]' : '')">
-    <div class="font-semibold">{{ it.n.name }}</div>
-    @if (it.n.person) { <div>{{ it.n.person }}</div> }
-    <div class="mt-0.5 text-xs text-muted">PSP-Code: {{ it.code }}</div>
+  <div class="max-w-[200px] min-w-[120px] rounded-lg border shadow-sm wrap-break-word"
+    [class]="(it.level === 0 ? 'border-accent bg-accent text-on-accent' : 'border-box bg-bg') +
+      (it.level === 1 && !vert ? ' border-t-[3px] border-t-accent' : '') +
+      (vert ? ' px-2.5 py-1 text-left' : ' px-3 py-2 text-center') +
+      (wide ? ' min-w-[max(120px,60%)]' : '')">
+    <div class="text-sm leading-snug font-semibold">{{ it.n.name }}</div>
+    @if (it.n.person) { <div class="text-xs" [class]="it.level === 0 ? 'text-on-accent/85' : 'text-fg/80'">{{ it.n.person }}</div> }
+    <div class="mt-0.5 text-[11px]" [class]="it.level === 0 ? 'text-on-accent/70' : 'text-muted'">PSP-Code {{ it.code }}</div>
   </div>
 </ng-template>
 

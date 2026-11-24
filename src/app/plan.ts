@@ -72,7 +72,7 @@ export function flatten(
 // Start/Ende in Tagen ab Projektstart (Ende exklusiv). Oberpunkte umfassen ihre Kinder; "nach" eines Oberpunkts gilt
 // für alle Kinder (EE/AE dann mit der Dauer des jeweiligen Kinds).
 // Beziehung: 1. Buchstabe = Zeitpunkt des Vorgängers, 2. = des Nachfolgers (E = Ende, A = Anfang). Standard EA.
-// shortcut: zählt Kalendertage, keine Werktage/Feiertage; bei Bedarf limits()/Datumsberechnung auf Werktage umstellen.
+// Ein "Tag" ist eine Spalte der Zeitachse – ob Kalender- oder Werktag, entscheidet calendar().
 export function schedule(rows: PlanNode[]): void {
   const byCode = new Map(rows.map((r) => [r.code, r]));
   const busy = new Set<PlanNode>();
@@ -126,6 +126,15 @@ function markCritical(rows: PlanNode[]): void {
         if (rel[0] === 'E' ? l.sched!.e === p.sched!.e : l.sched!.s === p.sched!.s) mark(l);
   };
   done.filter((r) => !r.children.length && r.sched!.e === end).forEach(mark);
+}
+
+// Datum jeder Spalte 0..n-1. Mit workdays nur Mo–Fr (Start am Wochenende -> nächster Montag).
+// shortcut: Feiertage zählen als Werktage; bei Bedarf hier eine Feiertagsliste überspringen.
+export function calendar(start: Date, n: number, workdays: boolean): Date[] {
+  const out: Date[] = [];
+  for (const d = new Date(start); out.length < n; d.setDate(d.getDate() + 1))
+    if (!workdays || d.getDay() % 6) out.push(new Date(d));
+  return out;
 }
 
 // ---------- JSON ----------

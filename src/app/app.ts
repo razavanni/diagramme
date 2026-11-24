@@ -1,13 +1,14 @@
 import { Component, computed, effect, ElementRef, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { toPng } from 'html-to-image';
-import { flatten, parse, PlanNode, SAMPLE, schedule, toData, toText } from './plan';
+import { calendar, flatten, parse, PlanNode, SAMPLE, schedule, toData, toText } from './plan';
 
 type Show = { sum: boolean; ap: boolean; ms: boolean; person: boolean; crit: boolean };
 // Baum für die PSP-Ansicht: Pakete (">" oder unter einem Paket) untereinander, Rest nebeneinander
 interface TreeItem {
   n: PlanNode;
   code: string;
+  level: number;
   vert: TreeItem[];
   horiz: TreeItem[];
 }
@@ -38,6 +39,7 @@ function tree(n: PlanNode, code: string, inVert: boolean): TreeItem {
   return {
     n,
     code,
+    level: code.split('.').length - 1,
     vert: kids.filter((k) => k.v).map((k) => k.it),
     horiz: kids.filter((k) => !k.v).map((k) => k.it),
   };
@@ -60,6 +62,8 @@ export class App {
     crit: true,
     ...this.loadShow(),
   });
+  // Dauern in Werktagen, Wochenenden verschwinden aus der Zeitachse
+  readonly workdays = signal(load('psp-workdays') === 'true');
   readonly width = signal(+(load('psp-editor-width') ?? 340) || 340);
   readonly dragging = signal(false);
   readonly showOpts: [keyof Show, string][] = [
@@ -67,7 +71,7 @@ export class App {
     ['ap', 'Arbeitspakete'],
     ['ms', 'Meilensteine'],
     ['person', 'Verantwortliche'],
-    ['crit', 'Kritischer Pfad (rot)'],
+    ['crit', 'Kritischer Pfad'],
   ];
   private readonly out = viewChild.required<ElementRef<HTMLElement>>('out');
 
@@ -83,13 +87,10 @@ export class App {
     if (!all.some((r) => r.sched))
       return { msg: 'Noch keine Dauern eingetragen. Beispiel: > Paket A | Karl | 3d | nach 1.1' };
     const show = this.show();
-    const start = new Date((this.start() || today) + 'T00:00');
-    const day = (i: number) => {
-      const d = new Date(start);
-      d.setDate(d.getDate() + i);
-      return d;
-    };
     const days = Math.max(...all.filter((r) => r.sched).map((r) => r.sched!.e), 1); // Zeitachse immer fürs ganze Projekt
+    // +1: Meilenstein am Projektende braucht ein Datum für Spalte "days"
+    const cal = calendar(new Date((this.start() || today) + 'T00:00'), days + 1, this.workdays());
+    const unit = this.workdays() ? 'Werktage' : 'Tage';
     const rows = all.filter((r) => show[r.children.length ? 'sum' : r.dur === 0 ? 'ms' : 'ap']);
     if (!rows.length)
       return { msg: 'Alle Zeilen sind ausgeblendet – mindestens einen Haken links setzen.' };
@@ -97,55 +98,58 @@ export class App {
     ctx.font = '600 13px system-ui, sans-serif';
     const width = (t?: string) => (t ? ctx.measureText(t).width : 0);
     const IND = 14,
-      DW = 24,
-      RH = 26,
-      HH = 40;
-    const codeW = Math.max(...rows.map((r) => width(r.code))) + 16;
-    const nameW = Math.max(...rows.map((r) => width(r.name) + r.depth! * IND)) + 16;
+      DW = 26,
+      RH = 30,
+      HH = 54;
+    const codeW = Math.max(...rows.map((r) => width(r.code))) + 20;
+    const nameW = Math.max(...rows.map((r) => width(r.name) + r.depth! * IND)) + 24;
     const X0 = codeW + nameW,
       H = HH + rows.length * RH;
     const W =
-      X0 + days * DW + (show.person ? Math.max(...rows.map((r) => width(r.person))) : 0) + 20;
+      X0 + days * DW + (show.person ? Math.max(...rows.map((r) => width(r.person))) : 0) + 24;
     return {
       W,
       H,
       HH,
       DW,
       RH,
+      X0,
       codeW,
       IND,
       xEnd: X0 + days * DW,
       person: show.person,
-      days: Array.from({ length: days }, (_, i) => {
-        const d = day(i);
-        return {
-          x: X0 + i * DW,
-          we: d.getDay() % 6 === 0,
-          date: d.getDate(),
-          month:
-            i === 0 || d.getDate() === 1
-              ? d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
-              : '',
-        };
-      }),
+      days: cal.slice(0, days).map((d, i) => ({
+        x: X0 + i * DW,
+        we: d.getDay() % 6 === 0,
+        date: d.getDate(),
+        wd: d.toLocaleDateString('de-DE', { weekday: 'short' }).slice(0, 2),
+        // neuer Monat/Woche: stärkere Linie (im Werktage-Modus fehlt evtl. der 1. des Monats)
+        month:
+          i === 0 || d.getMonth() !== cal[i - 1].getMonth()
+            ? d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
+            : '',
+        week: i > 0 && d.getDay() === 1,
+      })),
       rows: rows.map((r, k) => {
         const y = HH + k * RH,
           sc = r.sched;
         const x1 = sc ? X0 + sc.s * DW : 0,
           x2 = sc ? X0 + sc.e * DW : 0,
-          n = sc ? sc.e - sc.s : 0;
+          n = sc ? sc.e - sc.s : 0,
+          m = y + RH / 2;
         return {
           r,
           y,
+          m,
           x1,
           x2,
           kind: !sc ? null : !n ? 'ms' : r.children.length ? 'sum' : 'bar',
           crit: show.crit && !!r.crit,
-          sumPath: `M${x1} ${y + 8}H${x2}V${y + 20}l-6 -6H${x1 + 6}l-6 6Z`,
-          msPoints: `${x1},${y + 5} ${x1 + 8},${y + 13} ${x1},${y + 21} ${x1 - 8},${y + 13}`,
+          sumPath: `M${x1} ${m - 5}H${x2}V${m + 6}l-5 -5H${x1 + 5}l-5 5Z`,
+          msPoints: `${x1},${m - 8} ${x1 + 8},${m} ${x1},${m + 8} ${x1 - 8},${m}`,
           tip: !sc
             ? ''
-            : `${r.name}: ${n ? `${fmt(day(sc.s))} – ${fmt(day(sc.e - 1))} (${n} Tage)` : fmt(day(sc.s))}${r.crit ? ' – kritisch' : ''}`,
+            : `${r.name}: ${n ? `${fmt(cal[sc.s])} – ${fmt(cal[sc.e - 1])} (${n} ${unit})` : fmt(cal[sc.s])}${r.crit ? ' – kritisch' : ''}`,
         };
       }),
     };
@@ -157,6 +161,7 @@ export class App {
       save('psp-start', this.start());
       save('psp-view', this.view());
       save('psp-show', JSON.stringify(this.show()));
+      save('psp-workdays', String(this.workdays()));
       save('psp-editor-width', String(this.width()));
     });
   }
@@ -211,7 +216,7 @@ export class App {
     try {
       const url = await toPng(el, {
         pixelRatio: 2,
-        backgroundColor: getComputedStyle(document.body).backgroundColor,
+        backgroundColor: getComputedStyle(this.out().nativeElement).backgroundColor,
         width: el.scrollWidth,
         height: el.scrollHeight,
       });
@@ -222,7 +227,11 @@ export class App {
   }
 
   exportJson() {
-    const data = { projektstart: this.start(), plan: parse(this.text()).map(toData) };
+    const data = {
+      projektstart: this.start(),
+      nurWerktage: this.workdays(),
+      plan: parse(this.text()).map(toData),
+    };
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
     );
@@ -244,6 +253,7 @@ export class App {
         return;
       this.text.set(text);
       if (/^\d{4}-\d{2}-\d{2}$/.test(data.projektstart)) this.start.set(data.projektstart);
+      if (typeof data.nurWerktage === 'boolean') this.workdays.set(data.nurWerktage);
     } catch (err) {
       alert('Import fehlgeschlagen: ' + (err as Error).message);
     }
