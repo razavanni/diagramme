@@ -17,6 +17,7 @@
   --color-we: #f0f1f5;
   --color-bar: #5b6cf0;
   --color-crit: #e5484d;
+  --color-warn: #f59e0b; /* vor Vorgänger gelegt */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,5 +37,6 @@
     --color-we: #1b1c1f;
     --color-bar: #7b86ff;
     --color-crit: #ff6b6f;
+    --color-warn: #fbbf24;
   }
 }

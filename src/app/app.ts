@@ -128,6 +128,7 @@ export class App {
       IND,
       xEnd: X0 + days * DW,
       person: show.person,
+      anyEarly: rows.some((r) => r.early),
       days: cal.slice(0, days).map((d, i) => ({
         x: X0 + i * DW,
         we: d.getDay() % 6 === 0,
@@ -155,11 +156,12 @@ export class App {
           x2,
           kind: !sc ? null : !n ? 'ms' : r.children.length ? 'sum' : 'bar',
           crit: show.crit && !!r.crit,
+          early: !!r.early,
           sumPath: `M${x1} ${m - 5}H${x2}V${m + 6}l-5 -5H${x1 + 5}l-5 5Z`,
           msPoints: `${x1},${m - 8} ${x1 + 8},${m} ${x1},${m + 8} ${x1 - 8},${m}`,
           tip: !sc
             ? ''
-            : `${r.name}: ${n ? `${fmt(cal[sc.s])} – ${fmt(cal[sc.e - 1])} (${n} ${unit})` : fmt(cal[sc.s])}${r.crit ? ' – kritisch' : ''}`,
+            : `${r.name}: ${n ? `${fmt(cal[sc.s])} – ${fmt(cal[sc.e - 1])} (${n} ${unit})` : fmt(cal[sc.s])}${r.crit ? ' – kritisch' : ''}${r.early ? ' – ⚠ früher, als die Vorgänger erlauben' : ''}`,
         };
       }),
     };
@@ -204,7 +206,8 @@ export class App {
     this.text.set(ta.value);
   }
 
-  // Gantt-Balken ziehen: "move" setzt "ab Tag N" (oder entfernt es, wenn der Balken ohnehin dort stünde),
+  // Gantt-Balken ziehen: "move" setzt "ab Tag N" – überallhin, auch vor Vorgänger (entfernt es, wenn der
+  // Balken genau auf seinem Platz laut Abhängigkeiten landet),
   // "size" ändert die Dauer. Der Text wird bei jedem Spaltenwechsel neu geschrieben, dadurch rücken
   // abhängige Pakete und der kritische Pfad live mit.
   dragBar(e: PointerEvent, r: PlanNode, mode: 'move' | 'size', DW: number) {
@@ -222,7 +225,7 @@ export class App {
       this.text.set(
         mode === 'size'
           ? editLine(text0, r.line, 'dur', Math.max(1, d + du))
-          : editLine(text0, r.line, 'min', s + du > base ? s + du : null),
+          : editLine(text0, r.line, 'min', Math.max(0, s + du) === base ? null : Math.max(0, s + du)),
       );
     };
     window.addEventListener('pointermove', move);

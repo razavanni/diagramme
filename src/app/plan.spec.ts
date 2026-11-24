@@ -79,13 +79,20 @@ describe('plan', () => {
     expect(() => plan('A | 1d | nach 2\nB | 1d | nach 1')).toThrow('Zirkulär');
   });
 
-  it('kennt "ab Tag" als frühesten Start', () => {
+  it('kennt "ab Tag" als festen Start', () => {
     const at = plan('A | 3d\nB | 2d | nach 1 | ab Tag 6\nC | 1d | nach 2');
     expect(at('2').sched).toEqual({ s: 5, e: 7 });
     expect(at('2').base).toBe(3); // ohne "ab Tag" ginge es ab Tag 4
+    expect(at('2').early).toBe(false);
     expect(at('2').crit && at('3').crit).toBe(true);
     expect(at('1').crit).toBeFalsy(); // fester Termin: Pfad endet bei B
-    expect(plan('A | 3d\nB | 2d | nach 1 | ab 2')('2').sched!.s).toBe(3); // Vorgänger gewinnt
+  });
+
+  it('erlaubt "ab Tag" auch vor dem Vorgänger', () => {
+    const at = plan('A | 3d\nB | 2d | nach 1 | ab 2\nC | 1d | nach 2');
+    expect(at('2').sched).toEqual({ s: 1, e: 3 });
+    expect(at('2').early).toBe(true);
+    expect(at('3').sched!.s).toBe(3); // Nachfolger folgt dem verschobenen B
   });
 
   it('übernimmt "ab Tag" in JSON', () => {

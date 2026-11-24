@@ -7,7 +7,7 @@ export interface PlanNode {
   pkg: boolean;
   person?: string;
   dur?: number;
-  min?: number; // "ab Tag 5" -> 4 (frühester Start, 0-basiert)
+  min?: number; // "ab Tag 5" -> 4 (fester Start, 0-basiert)
   after: string[]; // "1.1" oder "1.1 EE"
   children: PlanNode[];
   parent: PlanNode | null;
@@ -16,7 +16,8 @@ export interface PlanNode {
   code?: string;
   depth?: number;
   sched?: { s: number; e: number } | null;
-  base?: number; // frühester Start ohne das eigene "ab Tag"
+  base?: number; // Start laut Abhängigkeiten (ohne "ab Tag")
+  early?: boolean; // per "ab Tag" vor einem Vorgänger gelegt
   drivers?: { p: PlanNode; rel: Rel }[];
   crit?: boolean;
 }
@@ -82,11 +83,9 @@ export function flatten(
 export function schedule(rows: PlanNode[]): void {
   const byCode = new Map(rows.map((r) => [r.code, r]));
   const busy = new Set<PlanNode>();
-  // alle Einschränkungen von n und seinen Oberpunkten, als frühester Start bei Dauer d.
-  // "ab Tag" hat kein p (fester Termin, dort endet der kritische Pfad) und merkt sich in `ab`, zu wem es gehört.
-  type Limit = { v: number; p?: PlanNode; rel?: Rel; ab?: PlanNode };
-  const limits = (n: PlanNode, d: number): Limit[] => {
-    const own: Limit[] = n.after.flatMap((tok) => {
+  // alle Einschränkungen von n und seinen Oberpunkten, als frühester Start bei Dauer d
+  const limits = (n: PlanNode, d: number): { v: number; p: PlanNode; rel: Rel }[] => {
+    const own = n.after.flatMap((tok) => {
       const [c, rel = 'EA'] = tok.split(' ') as [string, Rel?];
       const p = byCode.get(c);
       if (!p) throw new Error(`${n.code} ${n.name}: Vorgänger ${c} gibt es nicht`);
@@ -95,7 +94,6 @@ export function schedule(rows: PlanNode[]): void {
       const at = rel[0] === 'E' ? ps.e : ps.s;
       return [{ v: rel[1] === 'E' ? at - d : at, p, rel }];
     });
-    if (n.min != null) own.push({ v: n.min, ab: n });
     return n.parent ? [...limits(n.parent, d), ...own] : own;
   };
   const calc = (n: PlanNode): PlanNode['sched'] => {
@@ -108,10 +106,11 @@ export function schedule(rows: PlanNode[]): void {
       if (cs.length) r = { s: Math.min(...cs.map((c) => c.s)), e: Math.max(...cs.map((c) => c.e)) };
     } else if (n.dur != null) {
       const ls = limits(n, n.dur);
-      const s = Math.max(0, ...ls.map((l) => l.v)); // nie vor Projektstart
-      n.base = Math.max(0, ...ls.filter((l) => l.ab !== n).map((l) => l.v));
-      n.drivers =
-        s > 0 ? ls.flatMap((l) => (l.v === s && l.p ? [{ p: l.p, rel: l.rel! }] : [])) : [];
+      n.base = Math.max(0, ...ls.map((l) => l.v)); // Start laut Abhängigkeiten, nie vor Projektstart
+      // "ab Tag" legt den Start fest, auch vor einem Vorgänger (fester Termin: dort endet der kritische Pfad)
+      const s = n.min ?? n.base;
+      n.early = s < n.base;
+      n.drivers = n.min == null && s > 0 ? ls.filter((l) => l.v === s).map(({ p, rel }) => ({ p, rel })) : [];
       r = { s, e: s + n.dur };
     }
     busy.delete(n);
@@ -148,7 +147,7 @@ export function calendar(start: Date, n: number, workdays: boolean): Date[] {
   return out;
 }
 
-// Ändert in Zeile `line` die Dauer ("5d") oder den frühesten Start ("ab Tag N", value 0-basiert);
+// Ändert in Zeile `line` die Dauer ("5d") oder den festen Start ("ab Tag N", value 0-basiert);
 // null entfernt das Feld. Rest der Zeile (Einrückung, ">", andere Felder) bleibt unverändert.
 export function editLine(
   text: string,

@@ -62,7 +62,7 @@
         <ul class="list-disc space-y-1 pl-4">
           <li>Verantwortlicher: <code>| Karl Klammer</code></li>
           <li>Dauer: <code>| 5d</code> (<code>0d</code> = Meilenstein) – Kalendertage, mit „Nur Werktage“ Werktage</li>
-          <li>Frühester Start: <code>| ab Tag 5</code> (entsteht auch beim Verschieben im Gantt)</li>
+          <li>Fester Start: <code>| ab Tag 5</code> – gilt auch, wenn ein Vorgänger dann noch nicht fertig ist (orange umrandet). Entsteht beim Verschieben im Gantt.</li>
           <li>Vorgänger: <code>| nach 1.1, 1.2.3</code> (startet, wenn diese fertig sind)</li>
           <li>Kürzel dahinter: <code>EE</code> = gleich enden (A 3d, B 2d <code>| nach 1.1 EE</code> → B startet an Tag 2, beide fertig an Tag 3),
             <code>AA</code> = gleich anfangen, <code>AE</code> = enden, wenn Vorgänger anfängt</li>
@@ -103,6 +103,7 @@
               @if (show().crit) { <span class="flex items-center gap-1.5"><span class="h-2.5 w-5 rounded-sm bg-crit"></span> Kritischer Pfad</span> }
               <span class="flex items-center gap-1.5"><span class="h-1.5 w-5 bg-fg"></span> Sammelvorgang</span>
               <span class="flex items-center gap-1.5"><span class="size-2.5 rotate-45 bg-fg"></span> Meilenstein</span>
+              @if (g.anyEarly) { <span class="flex items-center gap-1.5"><span class="h-2.5 w-5 rounded-sm border-2 border-warn bg-bar"></span> vor Vorgänger gelegt</span> }
               <span class="ml-auto">Balken ziehen = verschieben, rechten Rand ziehen = Dauer ändern · Dauern in {{ workdays() ? 'Werktagen (Mo–Fr)' : 'Kalendertagen' }}</span>
             </div>
             <svg class="text-[13px]" [attr.width]="g.W" [attr.height]="g.H! + 1" [attr.viewBox]="'0 0 ' + g.W + ' ' + (g.H! + 1)">
@@ -132,14 +133,14 @@
                 <text class="fill-fg" [class.font-semibold]="row.r.children.length" [attr.x]="g.codeW! + row.r.depth! * g.IND!" [attr.y]="row.m" dominant-baseline="central">{{ row.r.name }}</text>
                 @switch (row.kind) {
                   @case ('ms') {
-                    <polygon class="cursor-grab touch-none" [class]="row.crit ? 'fill-crit' : 'fill-fg'" [attr.points]="row.msPoints"
+                    <polygon class="cursor-grab touch-none" [class]="(row.crit ? 'fill-crit' : 'fill-fg') + (row.early ? ' stroke-warn stroke-2' : '')" [attr.points]="row.msPoints"
                       (pointerdown)="dragBar($event, row.r, 'move', g.DW!)"><title>{{ row.tip }}</title></polygon>
                   }
                   @case ('sum') {
                     <path class="fill-fg" [attr.d]="row.sumPath"><title>{{ row.tip }}</title></path>
                   }
                   @case ('bar') {
-                    <rect class="cursor-grab touch-none" [class]="row.crit ? 'fill-crit' : 'fill-bar'" [attr.x]="row.x1 + 2" [attr.y]="row.m - 8" [attr.width]="row.x2 - row.x1 - 4" height="16" rx="4"
+                    <rect class="cursor-grab touch-none" [class]="(row.crit ? 'fill-crit' : 'fill-bar') + (row.early ? ' stroke-warn stroke-2' : '')" [attr.x]="row.x1 + 2" [attr.y]="row.m - 8" [attr.width]="row.x2 - row.x1 - 4" height="16" rx="4"
                       (pointerdown)="dragBar($event, row.r, 'move', g.DW!)"><title>{{ row.tip }}</title></rect>
                     <!-- unsichtbarer Griff am rechten Rand: Dauer ändern -->
                     <rect class="cursor-ew-resize touch-none fill-transparent" [attr.x]="row.x2 - 7" [attr.y]="row.m - 10" width="12" height="20"
