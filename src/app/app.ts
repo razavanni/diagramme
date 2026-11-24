@@ -225,7 +225,12 @@ export class App {
       this.text.set(
         mode === 'size'
           ? editLine(text0, r.line, 'dur', Math.max(1, d + du))
-          : editLine(text0, r.line, 'min', Math.max(0, s + du) === base ? null : Math.max(0, s + du)),
+          : editLine(
+              text0,
+              r.line,
+              'min',
+              Math.max(0, s + du) === base ? null : Math.max(0, s + du),
+            ),
       );
     };
     window.addEventListener('pointermove', move);

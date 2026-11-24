@@ -110,7 +110,8 @@ export function schedule(rows: PlanNode[]): void {
       // "ab Tag" legt den Start fest, auch vor einem Vorgänger (fester Termin: dort endet der kritische Pfad)
       const s = n.min ?? n.base;
       n.early = s < n.base;
-      n.drivers = n.min == null && s > 0 ? ls.filter((l) => l.v === s).map(({ p, rel }) => ({ p, rel })) : [];
+      n.drivers =
+        n.min == null && s > 0 ? ls.filter((l) => l.v === s).map(({ p, rel }) => ({ p, rel })) : [];
       r = { s, e: s + n.dur };
     }
     busy.delete(n);
