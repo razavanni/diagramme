@@ -1,7 +1,17 @@
 import { Component, computed, effect, ElementRef, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { toPng } from 'html-to-image';
-import { calendar, flatten, parse, PlanNode, SAMPLE, schedule, toData, toText } from './plan';
+import {
+  calendar,
+  editLine,
+  flatten,
+  parse,
+  PlanNode,
+  SAMPLE,
+  schedule,
+  toData,
+  toText,
+} from './plan';
 
 type Show = { sum: boolean; ap: boolean; ms: boolean; person: boolean; crit: boolean };
 // Baum für die PSP-Ansicht: Pakete (">" oder unter einem Paket) untereinander, Rest nebeneinander
@@ -192,6 +202,38 @@ export class App {
     else if (s === en) ta.setRangeText('\t', s, en, 'end');
     else ta.setRangeText(v.slice(lineStart, en).replace(/^/gm, '\t'), lineStart, en, 'select');
     this.text.set(ta.value);
+  }
+
+  // Gantt-Balken ziehen: "move" setzt "ab Tag N" (oder entfernt es, wenn der Balken ohnehin dort stünde),
+  // "size" ändert die Dauer. Der Text wird bei jedem Spaltenwechsel neu geschrieben, dadurch rücken
+  // abhängige Pakete und der kritische Pfad live mit.
+  dragBar(e: PointerEvent, r: PlanNode, mode: 'move' | 'size', DW: number) {
+    if (e.button !== 0 || !r.sched) return;
+    e.preventDefault();
+    const text0 = this.text(),
+      x0 = e.clientX,
+      { s } = r.sched,
+      d = r.dur ?? 0,
+      base = r.base ?? 0;
+    document.documentElement.style.cursor = mode === 'size' ? 'ew-resize' : 'grabbing';
+    const move = (ev: PointerEvent) => {
+      const du = Math.round((ev.clientX - x0) / DW);
+      if (!du) return this.text.set(text0); // nur Klick: Text nicht umformatieren
+      this.text.set(
+        mode === 'size'
+          ? editLine(text0, r.line, 'dur', Math.max(1, d + du))
+          : editLine(text0, r.line, 'min', s + du > base ? s + du : null),
+      );
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener(
+      'pointerup',
+      () => {
+        window.removeEventListener('pointermove', move);
+        document.documentElement.style.cursor = '';
+      },
+      { once: true },
+    );
   }
 
   // Trennleiste: Eingabebereich per Ziehen breiter/schmaler machen (min/max-width begrenzt per CSS)

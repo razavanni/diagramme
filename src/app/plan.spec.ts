@@ -1,4 +1,4 @@
-import { calendar, flatten, parse, SAMPLE, schedule, toData, toText } from './plan';
+import { calendar, editLine, flatten, parse, SAMPLE, schedule, toData, toText } from './plan';
 
 const days = (start: string, n: number, workdays: boolean) =>
   calendar(new Date(start + 'T00:00'), n, workdays).map((d) => d.getDate());
@@ -77,5 +77,36 @@ describe('plan', () => {
   it('meldet Fehler', () => {
     expect(() => plan('A | 1d | nach 9')).toThrow('gibt es nicht');
     expect(() => plan('A | 1d | nach 2\nB | 1d | nach 1')).toThrow('Zirkulär');
+  });
+
+  it('kennt "ab Tag" als frühesten Start', () => {
+    const at = plan('A | 3d\nB | 2d | nach 1 | ab Tag 6\nC | 1d | nach 2');
+    expect(at('2').sched).toEqual({ s: 5, e: 7 });
+    expect(at('2').base).toBe(3); // ohne "ab Tag" ginge es ab Tag 4
+    expect(at('2').crit && at('3').crit).toBe(true);
+    expect(at('1').crit).toBeFalsy(); // fester Termin: Pfad endet bei B
+    expect(plan('A | 3d\nB | 2d | nach 1 | ab 2')('2').sched!.s).toBe(3); // Vorgänger gewinnt
+  });
+
+  it('übernimmt "ab Tag" in JSON', () => {
+    const text = 'A | 3d | ab Tag 4 | nach 2\nB | 1d';
+    expect(toText(JSON.parse(JSON.stringify(parse(text).map(toData))))).toBe(text);
+  });
+});
+
+describe('editLine', () => {
+  const text = 'P\n\t> Paket A | Karl | 5d | nach 1.2\n\tB';
+  it('ersetzt die Dauer', () => {
+    expect(editLine(text, 1, 'dur', 7)).toBe('P\n\t> Paket A | Karl | 7d | nach 1.2\n\tB');
+  });
+  it('fügt "ab Tag" hinzu, ändert und entfernt es', () => {
+    const a = editLine(text, 1, 'min', 3);
+    expect(a.split('\n')[1]).toBe('\t> Paket A | Karl | 5d | nach 1.2 | ab Tag 4');
+    expect(editLine(a, 1, 'min', 5).split('\n')[1]).toContain('| ab Tag 6');
+    expect(editLine(a, 1, 'min', null)).toBe(text);
+  });
+  it('trifft die richtige Zeile', () => {
+    expect(parse(text)[0].children[1].line).toBe(2);
+    expect(editLine(text, 2, 'dur', 2)).toBe('P\n\t> Paket A | Karl | 5d | nach 1.2\n\tB | 2d');
   });
 });

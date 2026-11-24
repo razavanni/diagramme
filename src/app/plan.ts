@@ -7,22 +7,28 @@ export interface PlanNode {
   pkg: boolean;
   person?: string;
   dur?: number;
+  min?: number; // "ab Tag 5" -> 4 (frühester Start, 0-basiert)
   after: string[]; // "1.1" oder "1.1 EE"
   children: PlanNode[];
   parent: PlanNode | null;
+  line: number; // Zeile im Eingabetext, für editLine()
   // von flatten()/schedule() gesetzt
   code?: string;
   depth?: number;
   sched?: { s: number; e: number } | null;
+  base?: number; // frühester Start ohne das eigene "ab Tag"
   drivers?: { p: PlanNode; rel: Rel }[];
   crit?: boolean;
 }
+
+const DUR = /^(\d+)\s*(d|t|tage?)?$/i; // "5d", "5 Tage", "5"
+const AB = /^ab\s+(?:tag\s+)?(\d+)$/i; // "ab Tag 5", "ab 5"
 
 // Text -> Baum. Tiefe = Anzahl Tabs (4 Leerzeichen zählen auch als 1 Tab).
 export function parse(text: string): PlanNode[] {
   const root = { children: [] as PlanNode[] } as PlanNode;
   const stack: { node: PlanNode; depth: number }[] = [{ node: root, depth: -1 }];
-  for (const raw of text.split('\n')) {
+  for (const [lineNo, raw] of text.split('\n').entries()) {
     if (!raw.trim()) continue;
     const indent = raw.match(/^[\t ]*/)![0];
     const depth =
@@ -31,11 +37,11 @@ export function parse(text: string): PlanNode[] {
     const pkg = line.startsWith('>');
     if (pkg) line = line.slice(1).trim();
     const [name, ...fields] = line.split('|').map((s) => s.trim());
-    const node: PlanNode = { name, pkg, after: [], children: [], parent: null };
+    const node: PlanNode = { name, pkg, after: [], children: [], parent: null, line: lineNo };
     for (const f of fields) {
       let m;
-      if ((m = f.match(/^(\d+)\s*(d|t|tage?)?$/i)))
-        node.dur = +m[1]; // "5d", "5 Tage", "5"
+      if ((m = f.match(DUR))) node.dur = +m[1];
+      else if ((m = f.match(AB))) node.min = Math.max(0, +m[1] - 1);
       else if ((m = f.match(/^nach\s+(.+)$/i))) {
         // "nach 1.1, 1.2 EE" -> ["1.1", "1.2 EE"]
         node.after = [];
@@ -76,9 +82,11 @@ export function flatten(
 export function schedule(rows: PlanNode[]): void {
   const byCode = new Map(rows.map((r) => [r.code, r]));
   const busy = new Set<PlanNode>();
-  // alle Einschränkungen von n und seinen Oberpunkten, als frühester Start bei Dauer d
-  const limits = (n: PlanNode, d: number): { v: number; p: PlanNode; rel: Rel }[] => {
-    const own = n.after.flatMap((tok) => {
+  // alle Einschränkungen von n und seinen Oberpunkten, als frühester Start bei Dauer d.
+  // "ab Tag" hat kein p (fester Termin, dort endet der kritische Pfad) und merkt sich in `ab`, zu wem es gehört.
+  type Limit = { v: number; p?: PlanNode; rel?: Rel; ab?: PlanNode };
+  const limits = (n: PlanNode, d: number): Limit[] => {
+    const own: Limit[] = n.after.flatMap((tok) => {
       const [c, rel = 'EA'] = tok.split(' ') as [string, Rel?];
       const p = byCode.get(c);
       if (!p) throw new Error(`${n.code} ${n.name}: Vorgänger ${c} gibt es nicht`);
@@ -87,6 +95,7 @@ export function schedule(rows: PlanNode[]): void {
       const at = rel[0] === 'E' ? ps.e : ps.s;
       return [{ v: rel[1] === 'E' ? at - d : at, p, rel }];
     });
+    if (n.min != null) own.push({ v: n.min, ab: n });
     return n.parent ? [...limits(n.parent, d), ...own] : own;
   };
   const calc = (n: PlanNode): PlanNode['sched'] => {
@@ -100,7 +109,9 @@ export function schedule(rows: PlanNode[]): void {
     } else if (n.dur != null) {
       const ls = limits(n, n.dur);
       const s = Math.max(0, ...ls.map((l) => l.v)); // nie vor Projektstart
-      n.drivers = s > 0 ? ls.filter((l) => l.v === s) : [];
+      n.base = Math.max(0, ...ls.filter((l) => l.ab !== n).map((l) => l.v));
+      n.drivers =
+        s > 0 ? ls.flatMap((l) => (l.v === s && l.p ? [{ p: l.p, rel: l.rel! }] : [])) : [];
       r = { s, e: s + n.dur };
     }
     busy.delete(n);
@@ -137,12 +148,34 @@ export function calendar(start: Date, n: number, workdays: boolean): Date[] {
   return out;
 }
 
+// Ändert in Zeile `line` die Dauer ("5d") oder den frühesten Start ("ab Tag N", value 0-basiert);
+// null entfernt das Feld. Rest der Zeile (Einrückung, ">", andere Felder) bleibt unverändert.
+export function editLine(
+  text: string,
+  line: number,
+  key: 'dur' | 'min',
+  value: number | null,
+): string {
+  const lines = text.split('\n');
+  const [, head, rest] = lines[line].match(/^(\s*(?:>\s*)?)(.*)$/)!;
+  const [name, ...fields] = rest.split('|').map((s) => s.trim());
+  const i = fields.findIndex((f) => (key === 'dur' ? DUR : AB).test(f));
+  const val = value == null ? null : key === 'dur' ? `${value}d` : `ab Tag ${value + 1}`;
+  if (val == null) {
+    if (i >= 0) fields.splice(i, 1);
+  } else if (i >= 0) fields[i] = val;
+  else fields.push(val);
+  lines[line] = head + [name, ...fields].join(' | ');
+  return lines.join('\n');
+}
+
 // ---------- JSON ----------
 export interface PlanData {
   name: string;
   person?: string;
   paket?: boolean;
   dauer?: number;
+  abTag?: number;
   nach?: string[];
   kinder?: PlanData[];
 }
@@ -153,6 +186,7 @@ export const toData = (n: PlanNode): PlanData => ({
   ...(n.person && { person: n.person }),
   ...(n.pkg && { paket: true }),
   ...(n.dur != null && { dauer: n.dur }),
+  ...(n.min != null && { abTag: n.min + 1 }),
   ...(n.after.length && { nach: n.after }),
   ...(n.children.length && { kinder: n.children.map(toData) }),
 });
@@ -166,6 +200,8 @@ export function toText(items: unknown, depth = 0): string {
         throw new Error('Jeder Eintrag braucht einen "name"');
       if (it.dauer != null && !(Number.isInteger(it.dauer) && it.dauer >= 0))
         throw new Error(`"${it.name}": dauer muss eine ganze Zahl ≥ 0 sein`);
+      if (it.abTag != null && !(Number.isInteger(it.abTag) && it.abTag >= 1))
+        throw new Error(`"${it.name}": abTag muss eine ganze Zahl ≥ 1 sein`);
       const clean = (s: unknown) =>
         String(s)
           .replace(/\s*[|\n\t]\s*/g, ' ')
@@ -173,6 +209,7 @@ export function toText(items: unknown, depth = 0): string {
       const fields = [clean(it.name)];
       if (it.person) fields.push(clean(it.person));
       if (it.dauer != null) fields.push(it.dauer + 'd');
+      if (it.abTag != null) fields.push(`ab Tag ${it.abTag}`);
       if (Array.isArray(it.nach) && it.nach.length)
         fields.push('nach ' + it.nach.map(clean).join(', '));
       const line = '\t'.repeat(depth) + (it.paket ? '> ' : '') + fields.join(' | ');
