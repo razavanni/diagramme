@@ -1,3 +1,28 @@
-/* You can add global styles to this file, and also import other style files */
-
 @import "tailwindcss";
+
+/* Farben als Tailwind-Theme: bg-bg, text-fg, border-line, text-muted, bg-panel, stroke-grid, fill-we, fill-bar, fill-crit */
+@theme {
+  --color-bg: #fff;
+  --color-fg: #111;
+  --color-line: #111;
+  --color-muted: #666;
+  --color-panel: #f4f4f4;
+  --color-grid: #e2e2e2;
+  --color-we: #f2f2f2;
+  --color-bar: #2f6fde;
+  --color-crit: #d93025;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #222120;
+    --color-fg: #eee;
+    --color-line: #eee;
+    --color-muted: #aaa;
+    --color-panel: #2c2b2a;
+    --color-grid: #3a3937;
+    --color-we: #2a2928;
+    --color-bar: #5b9bff;
+    --color-crit: #ff6b5b;
+  }
+}
